@@ -1,4 +1,3 @@
-
 const CUBE_SIZE = new THREE.Vector3(2, 2, 2);
 const SPHERE_RADIUS = 0.1;
 
@@ -43,51 +42,54 @@ for (let i = 0; i < 8; i++) {
   sphere.solid = false;
   corners.add(sphere);
 }
-
 camera.position.z = 5;
 
 // triangles
 const triangles = new THREE.Group();
 group.add(triangles);
-function recalculateTriangles() {
-  triangles.children = [];
+const geometry = new THREE.BufferGeometry();
+geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+const material = new THREE.MeshBasicMaterial({ 
+  color: 0x0000ff, 
+  side: THREE.DoubleSide,
+  opacity: 0.5,
+  transparent: true
+});
+const mesh = new THREE.Mesh(geometry, material);
+const wireframe = new THREE.LineSegments(
+    new THREE.WireframeGeometry(geometry),
+    new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 })
+);
+triangles.add(mesh);
+triangles.add(wireframe);
 
+function recalculateTriangles() {
   let index = 0;
   corners.children.forEach((corner) => index |= corner.solid << corner.index);
 
+  const positions = [];
   const triangles_entry = TRIANGLE_TABLE[index];
   for (let i = 0; i < triangles_entry.length; i += 3) {
     if (triangles_entry[i] == -1)
       break;
 
-    const positions = new Float32Array(9);
     for (let j = 0; j <  3; j++) {
       const edges = EDGE_VERTEX_INDICES[triangles_entry[i + j]];
-
       const posA = getPos(edges[0]);
       const posB = getPos(edges[1]);
       
       const pos = new THREE.Vector3().addVectors(posA, posB).multiplyScalar(0.5);
-
-      positions[j * 3] = pos.x;
-      positions[j * 3 + 1] = pos.y;
-      positions[j * 3 + 2] = pos.z;
+      positions.push(...pos.toArray());
     }
-    console.log(positions);
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const material = new THREE.MeshBasicMaterial({ color: 0x0000ff, side: THREE.DoubleSide });
-    const triangle = new THREE.Mesh(geometry, material);
-    triangles.add(triangle);
-
-    const edges = new THREE.EdgesGeometry(geometry);
-    const outline_material = new THREE.LineBasicMaterial({ color: 0x000000 });
-    const outline = new THREE.LineSegments(edges, outline_material);
-    triangles.add(outline);
   }
-  console.log(triangles);
+  const vertices = new Float32Array(positions);
+  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  geometry.attributes.position.needsUpdate = true;
+
+  const wireframeGeometry = new THREE.WireframeGeometry(geometry);
+  wireframe.geometry.dispose(); 
+  wireframe.geometry = wireframeGeometry;
+  wireframe.geometry.attributes.position.needsUpdate = true;
 }
 
 // Animation loop
@@ -111,12 +113,10 @@ window.addEventListener("click", (event) => {
     const o = intersection.object;
     o.solid = !o.solid;
     o.material.color.set(o.material.color.getHex() === 0xffffff ? 0xff0000 : 0xffffff);
-    console.log(o.index, o.solid);
   });
 
   if (objects.length > 0)
     recalculateTriangles();
-
 }, false);
 
 function move(event, touch=false) {
@@ -136,8 +136,9 @@ function move(event, touch=false) {
   const diff = new THREE.Vector2().subVectors(mouse, oldMouse);
   oldMouse = mouse;
 
+  const speed = 2.0;
   const quaternion = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(-diff.y, diff.x, 0, 'XYZ'));
+      new THREE.Euler(-diff.y * speed, diff.x * speed, 0, 'XYZ'));
   group.quaternion.multiplyQuaternions(quaternion, group.quaternion);
 }
 window.addEventListener("mousemove", move, false);
